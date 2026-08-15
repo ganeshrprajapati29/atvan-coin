@@ -4,8 +4,10 @@ const RewardLog = require('../models/RewardLog');
 const Service = require('../models/Service');
 const KYC = require('../models/KYC');
 const Transaction = require('../models/Transaction');
+const CoinPurchase = require('../models/CoinPurchase');
 const ActivityLog = require('../models/ActivityLog');
 const { sendUserCredentialsEmail, sendCoinCertificateEmail } = require('../utils/sendMail');
+const { completeReferral } = require('./referralController');
 const crypto = require('crypto');
 
 // @desc    Get all users with pagination
@@ -269,12 +271,135 @@ const sendCoinCertificate = async (req, res) => {
 
     // Send certificate email
     try {
-      await sendCoinCertificateEmail(user);
+      const latestPurchase = await CoinPurchase.findOne({
+        user: user._id,
+        status: 'approved'
+      }).sort({ approvedAt: -1, createdAt: -1 });
+      await sendCoinCertificateEmail(user, latestPurchase);
       res.json({ message: 'Coin certificate sent successfully to user email' });
     } catch (emailError) {
       console.error('Failed to send certificate email:', emailError);
       res.status(500).json({ message: 'Failed to send certificate email' });
     }
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const getCoinPurchases = async (req, res) => {
+  try {
+    const purchases = await CoinPurchase.find({})
+      .populate('user', 'name email phone uniqueId totalCoins aadhaarNumber panNumber')
+      .populate('approvedBy', 'name email uniqueId')
+      .sort({ createdAt: -1 });
+
+    res.json(purchases);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const approveCoinPurchase = async (req, res) => {
+  try {
+    const purchase = await CoinPurchase.findById(req.params.id).populate('user');
+
+    if (!purchase) {
+      return res.status(404).json({ message: 'Purchase request not found' });
+    }
+
+    if (purchase.status === 'approved') {
+      return res.json({ message: 'Purchase already approved', purchase });
+    }
+
+    if (purchase.status === 'rejected') {
+      return res.status(400).json({ message: 'Rejected purchase cannot be approved' });
+    }
+
+    const user = await User.findById(purchase.user._id || purchase.user);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const approvedAt = new Date();
+    const certificateNo = `CF-${approvedAt.getFullYear()}-${String(purchase._id).slice(-6).toUpperCase()}`;
+
+    user.totalCoins = Number(((user.totalCoins || 0) + purchase.baseCoins).toFixed(8));
+    user.paymentStatus = 'completed';
+    user.serviceActivated = true;
+    user.updateTier();
+    await user.save();
+
+    purchase.status = 'approved';
+    purchase.approvedBy = req.user._id;
+    purchase.approvedAt = approvedAt;
+    purchase.lastAccruedAt = approvedAt;
+    purchase.nextAccrualAt = new Date(approvedAt.getTime() + 24 * 60 * 60 * 1000);
+    purchase.certificateNo = certificateNo;
+    purchase.adminNote = req.body?.adminNote || purchase.adminNote;
+    await purchase.save();
+
+    await RewardLog.create({
+      user: user._id,
+      coinsEarned: purchase.baseCoins,
+      reason: 'Coin Purchase',
+      transactionId: `CP-${purchase._id}`,
+      tierAtTime: 'Purchase'
+    });
+
+    await Transaction.findOneAndUpdate(
+      { coinPurchase: purchase._id },
+      {
+        status: 'SUCCESS',
+        coins: purchase.baseCoins,
+        dailyGrowthCoins: purchase.dailyGrowthCoins,
+        referenceId: certificateNo,
+        apiResponse: {
+          mode: 'manual_upi',
+          approvedBy: req.user._id,
+          approvedAt
+        }
+      },
+      { new: true }
+    );
+
+    await completeReferral(user._id);
+
+    res.json({
+      message: 'Purchase approved and coins credited',
+      purchase,
+      user
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const rejectCoinPurchase = async (req, res) => {
+  try {
+    const purchase = await CoinPurchase.findById(req.params.id);
+
+    if (!purchase) {
+      return res.status(404).json({ message: 'Purchase request not found' });
+    }
+
+    if (purchase.status === 'approved') {
+      return res.status(400).json({ message: 'Approved purchase cannot be rejected' });
+    }
+
+    purchase.status = 'rejected';
+    purchase.rejectedAt = new Date();
+    purchase.adminNote = req.body?.adminNote || purchase.adminNote;
+    await purchase.save();
+
+    await Transaction.findOneAndUpdate(
+      { coinPurchase: purchase._id },
+      {
+        status: 'REJECTED',
+        errorMessage: purchase.adminNote || 'Rejected by admin'
+      }
+    );
+
+    res.json({ message: 'Purchase rejected', purchase });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -477,6 +602,9 @@ module.exports = {
   createUser,
   activateUserAccount,
   sendCoinCertificate,
+  getCoinPurchases,
+  approveCoinPurchase,
+  rejectCoinPurchase,
   getDashboardStats,
   getRecentActivity,
   changeUserPassword,

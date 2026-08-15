@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getUsers, getWithdrawals, getAnalytics, updateUser, deleteUser, createUser, sendCoinCertificate, getDashboardStats, getRecentActivity, changeUserPassword, updateAdminProfile } = require('../controllers/adminController');
+const { getUsers, getWithdrawals, getAnalytics, updateUser, deleteUser, createUser, sendCoinCertificate, getCoinPurchases, approveCoinPurchase, rejectCoinPurchase, getDashboardStats, getRecentActivity, changeUserPassword, updateAdminProfile } = require('../controllers/adminController');
 const { getUserDetails, createOrUpdateUserDetails, deleteUserDetails } = require('../controllers/userDetailsController');
 const { getTransactions } = require('../controllers/transactionController');
 const { getSettings, updateSetting } = require('../controllers/settingsController');
@@ -11,6 +11,9 @@ const { admin } = require('../middleware/adminMiddleware');
 router.get('/users', protect, admin, getUsers);
 router.post('/users', protect, admin, createUser);
 router.post('/users/:id/send-certificate', protect, admin, sendCoinCertificate);
+router.get('/coin-purchases', protect, admin, getCoinPurchases);
+router.put('/coin-purchases/:id/approve', protect, admin, approveCoinPurchase);
+router.put('/coin-purchases/:id/reject', protect, admin, rejectCoinPurchase);
 router.get('/withdrawals', protect, admin, getWithdrawals);
 router.get('/analytics', protect, admin, getAnalytics);
 router.get('/dashboard-stats', protect, admin, getDashboardStats);

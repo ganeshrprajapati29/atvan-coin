@@ -13,14 +13,25 @@ const rewardLogSchema = new mongoose.Schema({
   reason: {
     type: String,
     required: true,
-    enum: ['login', 'referral', 'bonus', 'redemption', 'transfer']
+    enum: [
+      'login',
+      'referral',
+      'bonus',
+      'redemption',
+      'transfer',
+      'Account Activation',
+      'Payment Reward',
+      'Referral Bonus',
+      'Coin Purchase',
+      'Daily Growth'
+    ]
   },
   transactionId: {
     type: String
   },
   tierAtTime: {
     type: String,
-    enum: ['Silver', 'Gold', 'Platinum'],
+    enum: ['Silver', 'Gold', 'Platinum', 'Growth', 'Purchase'],
     required: true
   },
   loginCount: {

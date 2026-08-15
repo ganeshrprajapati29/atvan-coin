@@ -6,17 +6,21 @@ const transactionSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Withdrawal'
     },
+    coinPurchase: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'CoinPurchase'
+    },
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User'
     },
     apiResponse: {
       type: mongoose.Schema.Types.Mixed,
-      required: true
+      default: {}
     },
     status: {
       type: String,
-      enum: ['SUCCESS', 'FAILED'],
+      enum: ['PENDING', 'SUCCESS', 'FAILED', 'REJECTED'],
       required: true
     },
     amount: {
@@ -30,6 +34,14 @@ const transactionSchema = new mongoose.Schema(
     payoutId: {
       type: String
     },
+    transactionType: {
+      type: String,
+      enum: ['withdrawal', 'coin_purchase', 'payment', 'growth'],
+      default: 'payment'
+    },
+    coins: Number,
+    dailyGrowthCoins: Number,
+    referenceId: String,
     errorMessage: {
       type: String
     }

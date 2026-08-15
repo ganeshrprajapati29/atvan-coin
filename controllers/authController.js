@@ -8,10 +8,12 @@ const User = require('../models/User');
 const UserDetails = require('../models/UserDetails');
 const RewardLog = require('../models/RewardLog');
 const Transaction = require('../models/Transaction');
+const CoinPurchase = require('../models/CoinPurchase');
 
 const { calculateReward, updateUserTier } = require('../utils/rewardAlgorithm');
 const { sendWelcomeEmail, sendResetEmail } = require('../utils/sendMail');
 const { logUserActivity } = require('../utils/activityLogger');
+const { calculatePurchasePlan, accrueDailyGrowth } = require('../utils/coinGrowth');
 
 const { processReferral, completeReferral } = require('../controllers/referralController');
 
@@ -154,6 +156,7 @@ const login = async (req, res) => {
 
 const getProfile = async (req, res) => {
   try {
+    await accrueDailyGrowth(req.user._id);
     const user = await User.findById(req.user._id).select('-password');
     res.json(user);
   } catch (error) {
@@ -239,14 +242,10 @@ const resetPassword = async (req, res) => {
 
 const createPaymentOrder = async (req, res) => {
   try {
-    const { amount } = req.body;
+    const { amount, utrNumber, screenshotUrl } = req.body;
 
-    if (!amount || amount <= 0) {
-      return res.status(400).json({ message: 'Invalid amount' });
-    }
-
-    if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
-      return res.status(500).json({ message: 'Payment service not configured' });
+    if (!amount || Number(amount) < 100) {
+      return res.status(400).json({ message: 'Minimum purchase amount is ₹100' });
     }
 
     const user = await User.findById(req.user._id);
@@ -255,24 +254,44 @@ const createPaymentOrder = async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    const options = {
-      amount: Math.round(amount * 100),
-      currency: 'INR',
-      receipt: `rcpt_${Date.now()}`,
-      payment_capture: 1
-    };
+    const { baseCoins, dailyGrowthCoins } = calculatePurchasePlan(amount);
+    const purchase = await CoinPurchase.create({
+      user: user._id,
+      amount: Number(amount),
+      baseCoins,
+      dailyGrowthCoins,
+      utrNumber,
+      screenshotUrl
+    });
 
-    const order = await razorpay.orders.create(options);
+    await Transaction.create({
+      user: user._id,
+      coinPurchase: purchase._id,
+      status: 'PENDING',
+      amount: Number(amount),
+      currency: 'INR',
+      transactionType: 'coin_purchase',
+      coins: baseCoins,
+      dailyGrowthCoins,
+      referenceId: `CP-${purchase._id}`,
+      apiResponse: { mode: 'manual_upi', upiId: purchase.upiId }
+    });
 
     res.json({
-      orderId: order.id,
-      amount: order.amount,
-      currency: order.currency
+      message: 'Payment request submitted. Coins will be credited after admin approval.',
+      purchase,
+      amount: Number(amount),
+      currency: 'INR',
+      coins: baseCoins,
+      dailyGrowthCoins,
+      upiId: purchase.upiId,
+      whatsapp: '9953701057',
+      status: purchase.status
     });
 
   } catch (error) {
-    console.error("Payment order error:", error);
-    res.status(500).json({ message: 'Failed to create payment order' });
+    console.error("Payment request error:", error);
+    res.status(500).json({ message: 'Failed to submit payment request' });
   }
 };
 
@@ -281,7 +300,7 @@ const createPaymentOrder = async (req, res) => {
 
 const verifyPayment = async (req, res) => {
   try {
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, amount } = req.body;
+    const { amount, purchaseId } = req.body;
 
     const user = await User.findById(req.user._id);
 
@@ -289,43 +308,29 @@ const verifyPayment = async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    const sign = razorpay_order_id + '|' + razorpay_payment_id;
+    const purchase = purchaseId
+      ? await CoinPurchase.findOne({ _id: purchaseId, user: user._id })
+      : null;
 
-    const expectedSign = crypto
-      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
-      .update(sign)
-      .digest('hex');
-
-    if (razorpay_signature !== expectedSign) {
-      return res.status(400).json({ message: 'Payment verification failed' });
+    if (purchase) {
+      return res.json({
+        message: 'Payment request is awaiting admin approval',
+        purchase
+      });
     }
 
-    user.paymentStatus = 'completed';
-    user.serviceActivated = true;
-
-    const coinsToAdd = Math.floor(amount / 10);
-    user.totalCoins += coinsToAdd;
-
-    updateUserTier(user);
-    await user.save();
-
-    await RewardLog.create({
+    const { baseCoins, dailyGrowthCoins } = calculatePurchasePlan(amount || 100);
+    const nextPurchase = await CoinPurchase.create({
       user: user._id,
-      coinsEarned: coinsToAdd,
-      reason: 'Payment Reward',
-      tierAtTime: user.tier
+      amount: Number(amount || 100),
+      baseCoins,
+      dailyGrowthCoins
     });
 
-    await Transaction.create({
-      user: user._id,
-      status: 'SUCCESS',
-      amount,
-      currency: 'INR'
+    res.json({
+      message: 'Payment request submitted. Coins will be credited after admin approval.',
+      purchase: nextPurchase
     });
-
-    await completeReferral(user._id);
-
-    res.json({ message: 'Payment verified successfully' });
 
   } catch (error) {
     console.error("Verify payment error:", error);

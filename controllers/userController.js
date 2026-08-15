@@ -1,6 +1,7 @@
 const User = require('../models/User');
 const RewardLog = require('../models/RewardLog');
 const { logUserActivity } = require('../utils/activityLogger');
+const { accrueDailyGrowth } = require('../utils/coinGrowth');
 
 // @desc    Get leaderboard
 // @route   GET /api/users/leaderboard
@@ -111,6 +112,7 @@ const updateBankDetails = async (req, res) => {
 // @access  Private
 const getRewardHistory = async (req, res) => {
   try {
+    await accrueDailyGrowth(req.user._id);
     const rewards = await RewardLog.find({ user: req.user._id })
       .sort({ createdAt: -1 })
       .limit(50);
@@ -126,9 +128,9 @@ const getRewardHistory = async (req, res) => {
 // @access  Private
 const getTransactionHistory = async (req, res) => {
   try {
+    await accrueDailyGrowth(req.user._id);
     const transactions = await RewardLog.find({
-      user: req.user._id,
-      reason: 'transfer'
+      user: req.user._id
     })
     .populate('user', 'name uniqueId')
     .sort({ createdAt: -1 })
@@ -142,9 +144,10 @@ const getTransactionHistory = async (req, res) => {
           user: { $ne: req.user._id }
         }).populate('user', 'name uniqueId');
 
+        const isTransfer = transaction.reason === 'transfer';
         return {
           ...transaction.toObject(),
-          otherParty: relatedLog ? {
+          otherParty: isTransfer && relatedLog ? {
             name: relatedLog.user.name,
             uniqueId: relatedLog.user.uniqueId
           } : null,
@@ -165,6 +168,7 @@ const getTransactionHistory = async (req, res) => {
 // @access  Private
 const getDashboard = async (req, res) => {
   try {
+    await accrueDailyGrowth(req.user._id);
     const user = await User.findById(req.user._id).select('-password');
 
     const totalEarned = await RewardLog.aggregate([

@@ -9,6 +9,7 @@ const getTransactions = async (req, res) => {
   try {
     const transactions = await Transaction.find({})
       .populate('user', 'name email uniqueId')
+      .populate('coinPurchase')
       .populate({
         path: 'withdrawal',
         select: 'amount status user',

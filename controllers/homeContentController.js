@@ -1,5 +1,24 @@
 const HomeContent = require('../models/HomeContent');
 
+const latestSharePriceData = [
+  { srNo: 0, date: '1-Jan-27', price: 10, valueAt100: 100 },
+  { srNo: 1, date: '1-Jan-28', price: 15, valueAt100: 150 },
+  { srNo: 2, date: '1-Jan-29', price: 25, valueAt100: 250 },
+  { srNo: 3, date: '1-Jan-30', price: 40, valueAt100: 400 },
+  { srNo: 4, date: '1-Jan-31', price: 55, valueAt100: 550 },
+  { srNo: 5, date: '1-Jan-32', price: 75, valueAt100: 750 },
+  { srNo: 6, date: '1-Jan-33', price: 100, valueAt100: 1000 },
+  { srNo: 7, date: '1-Jan-34', price: 200, valueAt100: 2000 },
+  { srNo: 8, date: '1-Jan-35', price: 300, valueAt100: 3000 },
+  { srNo: 9, date: '1-Jan-36', price: 500, valueAt100: 5000 },
+  { srNo: 10, date: '1-Jan-37', price: 650, valueAt100: 6500 },
+  { srNo: 11, date: '1-Jan-38', price: 800, valueAt100: 8000 },
+  { srNo: 12, date: '1-Jan-39', price: 1000, valueAt100: 10000 },
+  { srNo: 13, date: '1-Jan-40', price: 1150, valueAt100: 11500 },
+  { srNo: 14, date: '1-Jan-41', price: 1300, valueAt100: 13000 },
+  { srNo: 15, date: '1-Jan-42', price: 1500, valueAt100: 15000 }
+];
+
 // Get default sections for initialization
 const getDefaultSections = () => {
   return [
@@ -174,24 +193,7 @@ const getDefaultSections = () => {
       title: 'ATVAN Share Price Chart',
       subtitle: 'Track the projected growth of Atvan share prices over the years, demonstrating our commitment to delivering exceptional value to our investors.',
       content: [],
-      sharePriceData: [
-        { srNo: 0, date: '1-Jan-26', price: 10 },
-        { srNo: 1, date: '1-Jan-27', price: 15 },
-        { srNo: 2, date: '1-Jan-28', price: 25 },
-        { srNo: 3, date: '1-Jan-29', price: 40 },
-        { srNo: 4, date: '1-Jan-30', price: 55 },
-        { srNo: 5, date: '1-Jan-31', price: 75 },
-        { srNo: 6, date: '1-Jan-32', price: 100 },
-        { srNo: 7, date: '1-Jan-33', price: 200 },
-        { srNo: 8, date: '1-Jan-34', price: 300 },
-        { srNo: 9, date: '1-Jan-35', price: 500 },
-        { srNo: 10, date: '1-Jan-36', price: 650 },
-        { srNo: 11, date: '1-Jan-37', price: 800 },
-        { srNo: 12, date: '1-Jan-38', price: 1000 },
-        { srNo: 13, date: '1-Jan-39', price: 1150 },
-        { srNo: 14, date: '1-Jan-40', price: 1300 },
-        { srNo: 15, date: '1-Jan-41', price: 1500 }
-      ],
+      sharePriceData: latestSharePriceData,
       order: 6,
       isActive: true
     },
@@ -229,6 +231,12 @@ const getHomeContent = async (req, res) => {
       });
     }
     // Sort sections by order
+    homeContent.sections = homeContent.sections.map(section => {
+      if (section.id === 'share-price' || section.type === 'share-price') {
+        section.sharePriceData = latestSharePriceData;
+      }
+      return section;
+    });
     homeContent.sections.sort((a, b) => a.order - b.order);
     res.json(homeContent);
   } catch (error) {

@@ -172,6 +172,61 @@ const sendCoinCertificateEmail = async (user) => {
   return await sendEmail(user.email, subject, html);
 };
 
+const sendAtvanCoinCertificateEmail = async (user, purchase = null) => {
+  const subject = 'Your Coin / Share Certificate - ATVAN';
+  const certificateNo = purchase?.certificateNo || `CF-${new Date().getFullYear()}-${String(user.uniqueId || user._id).slice(-6)}`;
+  const coins = purchase?.baseCoins || user.totalCoins || 0;
+  const amount = purchase?.amount || Math.round((coins || 0) * 10);
+  const aadhaar = user.aadhaarNumber ? `********${String(user.aadhaarNumber).slice(-4)}` : 'Not updated';
+  const rows = [
+    [0, '1-Jan-27', 10, 100, 8, '1-Jan-35', 300, 3000],
+    [1, '1-Jan-28', 15, 150, 9, '1-Jan-36', 500, 5000],
+    [2, '1-Jan-29', 25, 250, 10, '1-Jan-37', 650, 6500],
+    [3, '1-Jan-30', 40, 400, 11, '1-Jan-38', 800, 8000],
+    [4, '1-Jan-31', 55, 550, 12, '1-Jan-39', 1000, 10000],
+    [5, '1-Jan-32', 75, 750, 13, '1-Jan-40', 1150, 11500],
+    [6, '1-Jan-33', 100, 1000, 14, '1-Jan-41', 1300, 13000],
+    [7, '1-Jan-34', 200, 2000, 15, '1-Jan-42', 1500, 15000]
+  ];
+  const chartRows = rows.map(row => `<tr>${row.map(cell => `<td style="border:1px solid #d7c28a;padding:8px;text-align:center;color:#fff;font-weight:700;">${cell}</td>`).join('')}</tr>`).join('');
+  const html = `
+    <div style="font-family: Georgia, 'Times New Roman', serif; max-width: 860px; margin: 0 auto; background:#080906; color:#fff; padding:28px; border:8px double #d6aa46;">
+      <div style="border:2px solid #d6aa46; padding:24px; background:linear-gradient(135deg,#0b0d09,#1d2118);">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;">
+          <div style="font-size:18px;font-weight:700;">CF No - <span style="display:inline-block;background:#fff;color:#111;padding:3px 14px;">${certificateNo}</span></div>
+          <div style="text-align:center;">
+            <div style="font-size:42px;font-weight:900;color:#d6aa46;letter-spacing:2px;">ATVAN</div>
+            <div style="font-family:Arial,sans-serif;font-size:12px;color:#f4d47a;">FUTURE OF DIGITAL WEALTH</div>
+          </div>
+        </div>
+        <h1 style="text-align:center;color:#f4d47a;font-size:34px;margin:26px 0 18px;">COIN / SHARE CERTIFICATE</h1>
+        <div style="border:2px solid #d6aa46;padding:18px;margin:0 auto 20px;max-width:720px;text-align:center;font-size:18px;line-height:1.45;">
+          THIS IS TO CERTIFY that the certificate holder is the registered holder of the within-mentioned coin(s). The amount endorsed herein has been paid up on each such coin.
+        </div>
+        <div style="display:flex;gap:10px;background:linear-gradient(90deg,#f8e6a1,#b8842e,#f8e6a1);color:#111;border-radius:8px;padding:12px;margin:18px 0;font-family:Arial,sans-serif;font-weight:900;font-size:18px;">
+          <div style="flex:1;text-align:center;">No. Of Coin : ${coins}</div>
+          <div style="flex:1;text-align:center;">Price Per Coin : 10/-</div>
+          <div style="flex:1;text-align:center;">Total Amount: ${amount}/-</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:28px 0;font-size:18px;">
+          <div>Mr/Ms: <span style="display:inline-block;background:#fff;color:#111;min-width:240px;padding:7px 10px;">${user.name || ''}</span></div>
+          <div>Aadhaar: <span style="display:inline-block;background:#fff;color:#111;min-width:240px;padding:7px 10px;">${aadhaar}</span></div>
+          <div>User ID: <span style="color:#f4d47a;font-weight:900;">${user.uniqueId || '-'}</span></div>
+          <div>Current Balance: <span style="color:#f4d47a;font-weight:900;">${user.totalCoins || 0} coins</span></div>
+        </div>
+        <h2 style="text-align:center;background:linear-gradient(90deg,#f8e6a1,#b8842e,#f8e6a1);color:#111;border-radius:8px;padding:10px;">COIN / SHARE CHART</h2>
+        <table style="width:100%;border-collapse:collapse;margin-top:12px;background:#111;">
+          <thead><tr>${['Sr. No.','Year','Price','Value @Rs.100','Sr. No.','Year','Price','Value @Rs.100'].map(h => `<th style="border:1px solid #d7c28a;padding:8px;background:#d6aa46;color:#111;">${h}</th>`).join('')}</tr></thead>
+          <tbody>${chartRows}</tbody>
+        </table>
+        <div style="text-align:center;margin-top:24px;color:#f4d47a;font-size:28px;font-weight:900;">ATVAN</div>
+        <p style="text-align:center;color:#d9d9d9;font-family:Arial,sans-serif;font-size:13px;">Issued on ${new Date().toLocaleDateString('en-IN')} | Support: 9953701057</p>
+      </div>
+    </div>
+  `;
+  return await sendEmail(user.email, subject, html);
+};
+
 module.exports = {
   sendEmail,
   sendWelcomeEmail,
@@ -179,5 +234,5 @@ module.exports = {
   sendWithdrawalFailedEmail,
   sendResetEmail,
   sendUserCredentialsEmail,
-  sendCoinCertificateEmail
+  sendCoinCertificateEmail: sendAtvanCoinCertificateEmail
 };
