@@ -248,6 +248,10 @@ const createPaymentOrder = async (req, res) => {
       return res.status(400).json({ message: 'Minimum purchase amount is ₹100' });
     }
 
+    if (!utrNumber || !String(utrNumber).trim()) {
+      return res.status(400).json({ message: 'UTR / transaction number is required' });
+    }
+
     const user = await User.findById(req.user._id);
 
     if (!user) {
@@ -260,7 +264,7 @@ const createPaymentOrder = async (req, res) => {
       amount: Number(amount),
       baseCoins,
       dailyGrowthCoins,
-      utrNumber,
+      utrNumber: String(utrNumber).trim(),
       screenshotUrl
     });
 
@@ -274,7 +278,11 @@ const createPaymentOrder = async (req, res) => {
       coins: baseCoins,
       dailyGrowthCoins,
       referenceId: `CP-${purchase._id}`,
-      apiResponse: { mode: 'manual_upi', upiId: purchase.upiId }
+      apiResponse: {
+        mode: 'manual_upi',
+        upiId: purchase.upiId,
+        utrNumber: String(utrNumber).trim()
+      }
     });
 
     res.json({
