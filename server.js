@@ -345,6 +345,7 @@ app.use("/api/referrals", require("./routes/referralRoutes"));
 app.use("/api/reports", require("./routes/reportRoutes"));
 app.use("/api/kyc", require("./routes/kycRoutes"));
 app.use("/api/home-content", require("./routes/homeContentRoutes"));
+app.use("/api/onboarding-content", require("./routes/onboardingContentRoutes"));
 app.use("/api/videos", require("./routes/videoRoutes"));
 
 /* -------------------------------
