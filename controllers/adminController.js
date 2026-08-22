@@ -229,7 +229,8 @@ const activateUserAccount = async (req, res) => {
       user: user._id,
       coinsEarned: coinsToAdd,
       reason: 'Account Activation',
-      description: 'Account activated by admin'
+      description: 'Account activated by admin',
+      tierAtTime: user.tier || 'Silver'
     });
     await rewardLog.save();
 
