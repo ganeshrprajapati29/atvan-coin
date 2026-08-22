@@ -10,10 +10,7 @@ const HomeContent = require("./models/HomeContent");
 -------------------------------- */
 dotenv.config();
 
-/* 🔍 FORENSIC DEBUG */
-console.log("ENV loaded:", process.env.MONGO_URI ? "YES ✅" : "NO ❌");
-console.log("RAW URI:", process.env.MONGO_URI?.substring(0, 50) + "...");
-console.log("URI length:", process.env.MONGO_URI?.length);
+console.log("ENV loaded:", process.env.MONGO_URI ? "YES" : "NO");
 
 /* -------------------------------
    Connect MongoDB
@@ -25,9 +22,6 @@ const connectDB = async () => {
     }
 
     const uri = process.env.MONGO_URI.trim();
-
-    console.log("CLEAN URI first 50 chars:", uri.substring(0, 50) + "...");
-    console.log("CLEAN length:", uri.length);
 
     await mongoose.connect(uri, {
       useNewUrlParser: true,
@@ -308,6 +302,7 @@ app.options("*", cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.text());
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 /* -------------------------------
    Request Logging Middleware

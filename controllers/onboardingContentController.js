@@ -245,16 +245,26 @@ const uploadImage = async (req, res) => {
   }
   const localPath = req.file.path;
   try {
-    const result = await cloudinary.uploader.upload(localPath, {
-      folder: 'onboarding',
-      resource_type: 'image'
-    });
-    res.json({ url: result.secure_url, publicId: result.public_id });
+    const hasCloudinaryConfig = process.env.CLOUDINARY_CLOUD_NAME
+      && process.env.CLOUDINARY_API_KEY
+      && process.env.CLOUDINARY_API_SECRET;
+
+    if (hasCloudinaryConfig) {
+      const result = await cloudinary.uploader.upload(localPath, {
+        folder: 'onboarding',
+        resource_type: 'image'
+      });
+      fs.unlink(localPath, () => {});
+      return res.json({ url: result.secure_url, publicId: result.public_id });
+    }
+
+    const publicPath = `/uploads/onboarding/${req.file.filename}`;
+    const proto = req.get('x-forwarded-proto') || req.protocol;
+    const baseUrl = `${proto}://${req.get('host')}`;
+    res.json({ url: `${baseUrl}${publicPath}`, publicId: req.file.filename });
   } catch (error) {
     console.error('Error uploading onboarding image:', error);
     res.status(500).json({ message: error.message });
-  } finally {
-    fs.unlink(localPath, () => {});
   }
 };
 

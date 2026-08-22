@@ -64,6 +64,7 @@ const blockSchema = new mongoose.Schema({
       'bullets',
       'chart',
       'features',
+      'steps',
       'promo',
       'callCta',
       'note',
