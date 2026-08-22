@@ -1,5 +1,14 @@
 const Settings = require('../models/Settings');
 
+const defaultAppConfig = {
+  maintenanceMode: false,
+  maintenanceTitle: 'App under maintenance',
+  maintenanceMessage: 'We are improving ATVAN Coin. Please check back shortly.',
+  maintenanceImageUrl: '',
+  supportPhone: '9953701057',
+  updatedAt: null
+};
+
 // @desc    Get all settings
 // @route   GET /api/settings
 // @access  Private/Admin
@@ -73,10 +82,28 @@ const getSettingsByCategory = async (req, res) => {
   }
 };
 
+// @desc    Public app runtime config
+// @route   GET /api/app-config
+// @access  Public
+const getAppConfig = async (req, res) => {
+  try {
+    const setting = await Settings.findOne({ key: 'app_maintenance' }).lean();
+    res.json({
+      ...defaultAppConfig,
+      ...(setting?.value || {}),
+      updatedAt: setting?.updatedAt || setting?.value?.updatedAt || null
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   getSettings,
   getSettingByKey,
   updateSetting,
   deleteSetting,
-  getSettingsByCategory
+  getSettingsByCategory,
+  getAppConfig,
+  defaultAppConfig
 };

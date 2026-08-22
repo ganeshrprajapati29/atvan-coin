@@ -13,7 +13,7 @@ const settingsSchema = new mongoose.Schema({
   description: String,
   category: {
     type: String,
-    enum: ['general', 'rewards', 'payments', 'notifications'],
+    enum: ['general', 'rewards', 'payments', 'notifications', 'app'],
     default: 'general'
   }
 }, {
