@@ -1,7 +1,8 @@
 const https = require('https');
+const { YOUTUBE_CHANNEL_ID, YOUTUBE_CHANNEL_URL } = require('../config/env');
 
-const DEFAULT_CHANNEL_ID = process.env.YOUTUBE_CHANNEL_ID || '';
-const DEFAULT_CHANNEL_URL = process.env.YOUTUBE_CHANNEL_URL || '';
+const DEFAULT_CHANNEL_ID = YOUTUBE_CHANNEL_ID || '';
+const DEFAULT_CHANNEL_URL = YOUTUBE_CHANNEL_URL || '';
 
 function fetchText(url) {
   return new Promise((resolve, reject) => {

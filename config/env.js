@@ -3,4 +3,6 @@ module.exports = {
   RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET,
   EMAIL_USER: process.env.EMAIL_USER,
   EMAIL_PASS: process.env.EMAIL_PASS,
+  YOUTUBE_CHANNEL_ID: process.env.YOUTUBE_CHANNEL_ID,
+  YOUTUBE_CHANNEL_URL: process.env.YOUTUBE_CHANNEL_URL,
 };
