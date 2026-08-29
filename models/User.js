@@ -140,19 +140,41 @@ const userSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Auto-generate unique User ID (ATC001, ATC002, etc.) and Referral Code
+const USER_ID_PREFIX = 'ATC';
+const USER_ID_START = 101;
+
+const nextAtvanUserId = async () => {
+  const [lastUser] = await mongoose.models.User.aggregate([
+    {
+      $match: {
+        uniqueId: new RegExp(`^${USER_ID_PREFIX}\\d+$`)
+      }
+    },
+    {
+      $project: {
+        number: {
+          $toInt: {
+            $substr: [
+              '$uniqueId',
+              USER_ID_PREFIX.length,
+              -1
+            ]
+          }
+        }
+      }
+    },
+    { $sort: { number: -1 } },
+    { $limit: 1 }
+  ]);
+
+  const nextNumber = Math.max(lastUser?.number || 0, USER_ID_START - 1) + 1;
+  return `${USER_ID_PREFIX}${nextNumber.toString().padStart(3, '0')}`;
+};
+
+// Auto-generate unique User ID (ATC101, ATC102, etc.) and Referral Code
 userSchema.pre('save', async function (next) {
   if (!this.uniqueId) {
-    // Find the highest ATC number
-    const lastUser = await mongoose.models.User.findOne({ uniqueId: /^ATC\d+$/ }).sort({ uniqueId: -1 });
-    let nextNumber = 1;
-
-    if (lastUser) {
-      const lastNumber = parseInt(lastUser.uniqueId.replace('ATC', ''));
-      nextNumber = lastNumber + 1;
-    }
-
-    this.uniqueId = `ATC${nextNumber.toString().padStart(3, '0')}`;
+    this.uniqueId = await nextAtvanUserId();
   }
 
   if (!this.referralCode) {
