@@ -473,7 +473,7 @@ const createRazorpayPaymentOrder = async (req, res) => {
 
     if (hasCompletedPurchase) {
       return res.status(409).json({
-        message: 'Coin purchase already completed for this account',
+        message: 'Atvan Coin purchase already completed for this account',
         paymentDisabled: true
       });
     }
@@ -530,7 +530,12 @@ const createRazorpayPaymentOrder = async (req, res) => {
     });
   } catch (error) {
     console.error('Create Razorpay order error:', error);
-    res.status(500).json({ message: 'Failed to create Razorpay order' });
+    const isAuthError = error?.statusCode === 401;
+    res.status(isAuthError ? 400 : 500).json({
+      message: isAuthError
+        ? 'Payment gateway authentication failed. Please contact support.'
+        : 'Failed to create Razorpay order'
+    });
   }
 };
 
