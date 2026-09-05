@@ -141,6 +141,8 @@ const register = async (req, res) => {
       uniqueId: user.uniqueId,
       totalCoins: user.totalCoins,
       tier: user.tier,
+      paymentStatus: user.paymentStatus,
+      serviceActivated: user.serviceActivated,
       paymentRequired: true,
       amount: 100,
       token: generateToken(user._id)
@@ -200,6 +202,8 @@ const login = async (req, res) => {
       phone: user.phone,
       totalCoins: user.totalCoins,
       tier: user.tier,
+      paymentStatus: user.paymentStatus,
+      serviceActivated: user.serviceActivated,
       isAdmin: user.isAdmin,
       token
     });
@@ -461,6 +465,17 @@ const createRazorpayPaymentOrder = async (req, res) => {
     const user = await User.findById(req.user._id);
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
+    }
+
+    const hasCompletedPurchase = user.serviceActivated
+      || user.paymentStatus === 'completed'
+      || await CoinPurchase.exists({ user: user._id, amount: 100, status: 'approved' });
+
+    if (hasCompletedPurchase) {
+      return res.status(409).json({
+        message: 'Coin purchase already completed for this account',
+        paymentDisabled: true
+      });
     }
 
     const { baseCoins, dailyGrowthCoins } = calculatePurchasePlan(amount);
