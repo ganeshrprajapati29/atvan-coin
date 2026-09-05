@@ -14,8 +14,67 @@ const { calculateReward, updateUserTier } = require('../utils/rewardAlgorithm');
 const { sendWelcomeEmail, sendResetEmail } = require('../utils/sendMail');
 const { logUserActivity } = require('../utils/activityLogger');
 const { calculatePurchasePlan, accrueDailyGrowth } = require('../utils/coinGrowth');
+const { RAZORPAY_KEY_ID, RAZORPAY_WEBHOOK_SECRET } = require('../config/env');
 
 const { processReferral, completeReferral } = require('../controllers/referralController');
+
+const approveRazorpayPurchase = async (purchase, paymentPayload = {}, approvedBy = null) => {
+  if (purchase.status === 'approved') return purchase;
+
+  const user = await User.findById(purchase.user);
+  if (!user) throw new Error('User not found');
+
+  const approvedAt = new Date();
+  const certificateNo = `CF-${approvedAt.getFullYear()}-${String(purchase._id).slice(-6).toUpperCase()}`;
+
+  user.totalCoins = Number(((user.totalCoins || 0) + purchase.baseCoins).toFixed(8));
+  user.paymentStatus = 'completed';
+  user.serviceActivated = true;
+  user.updateTier();
+  await user.save();
+
+  purchase.status = 'approved';
+  purchase.paymentMethod = 'razorpay';
+  purchase.razorpayPaymentId = paymentPayload.razorpay_payment_id || paymentPayload.id || purchase.razorpayPaymentId;
+  purchase.razorpaySignature = paymentPayload.razorpay_signature || purchase.razorpaySignature;
+  purchase.approvedBy = approvedBy || purchase.approvedBy;
+  purchase.approvedAt = approvedAt;
+  purchase.lastAccruedAt = approvedAt;
+  purchase.nextAccrualAt = new Date(approvedAt.getTime() + 24 * 60 * 60 * 1000);
+  purchase.certificateNo = purchase.certificateNo || certificateNo;
+  await purchase.save();
+
+  await RewardLog.create({
+    user: user._id,
+    coinsEarned: purchase.baseCoins,
+    reason: 'Coin Purchase',
+    transactionId: `CP-${purchase._id}`,
+    tierAtTime: 'Purchase'
+  });
+
+  await Transaction.findOneAndUpdate(
+    { coinPurchase: purchase._id },
+    {
+      status: 'SUCCESS',
+      amount: purchase.amount,
+      currency: 'INR',
+      transactionType: 'coin_purchase',
+      coins: purchase.baseCoins,
+      dailyGrowthCoins: purchase.dailyGrowthCoins,
+      referenceId: purchase.razorpayPaymentId || purchase.certificateNo,
+      apiResponse: {
+        mode: 'razorpay',
+        orderId: purchase.razorpayOrderId,
+        paymentId: purchase.razorpayPaymentId,
+        approvedAt
+      }
+    },
+    { new: true }
+  );
+
+  await completeReferral(user._id);
+  return purchase;
+};
 
 
 // 🔹 Generate JWT token
@@ -238,9 +297,9 @@ const resetPassword = async (req, res) => {
 };
 
 
-// ================= PAYMENT ORDER =================
+// ================= LEGACY MANUAL PAYMENT ORDER (kept for old records only) =================
 
-const createPaymentOrder = async (req, res) => {
+const legacyManualPaymentOrder = async (req, res) => {
   try {
     const { amount, utrNumber, screenshotUrl } = req.body;
 
@@ -304,9 +363,9 @@ const createPaymentOrder = async (req, res) => {
 };
 
 
-// ================= VERIFY PAYMENT =================
+// ================= LEGACY MANUAL VERIFY PAYMENT (kept for old records only) =================
 
-const verifyPayment = async (req, res) => {
+const legacyManualVerifyPayment = async (req, res) => {
   try {
     const { amount, purchaseId } = req.body;
 
@@ -388,6 +447,167 @@ const changePassword = async (req, res) => {
   }
 };
 
+const createRazorpayPaymentOrder = async (req, res) => {
+  try {
+    const amount = Number(req.body.amount);
+    if (!amount || amount < 100) {
+      return res.status(400).json({ message: 'Minimum purchase amount is Rs.100' });
+    }
+
+    if (!razorpay) {
+      return res.status(503).json({ message: 'Razorpay is not configured' });
+    }
+
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const { baseCoins, dailyGrowthCoins } = calculatePurchasePlan(amount);
+    const order = await razorpay.orders.create({
+      amount: Math.round(amount * 100),
+      currency: 'INR',
+      receipt: `ATVAN-${Date.now()}-${String(user._id).slice(-6)}`,
+      notes: {
+        userId: String(user._id),
+        email: user.email,
+        coins: String(baseCoins),
+        product: 'ATVAN_COIN'
+      }
+    });
+
+    const purchase = await CoinPurchase.create({
+      user: user._id,
+      amount,
+      baseCoins,
+      dailyGrowthCoins,
+      paymentMethod: 'razorpay',
+      razorpayOrderId: order.id
+    });
+
+    await Transaction.create({
+      user: user._id,
+      coinPurchase: purchase._id,
+      status: 'PENDING',
+      amount,
+      currency: 'INR',
+      transactionType: 'coin_purchase',
+      coins: baseCoins,
+      dailyGrowthCoins,
+      referenceId: order.id,
+      apiResponse: {
+        mode: 'razorpay',
+        order
+      }
+    });
+
+    res.json({
+      message: 'Razorpay order created',
+      keyId: RAZORPAY_KEY_ID,
+      order,
+      purchase,
+      amount,
+      currency: 'INR',
+      coins: baseCoins,
+      dailyGrowthCoins,
+      callbackUrl: 'https://coin.atvanev.in/payment',
+      status: purchase.status
+    });
+  } catch (error) {
+    console.error('Create Razorpay order error:', error);
+    res.status(500).json({ message: 'Failed to create Razorpay order' });
+  }
+};
+
+const verifyRazorpayPayment = async (req, res) => {
+  try {
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+      purchaseId
+    } = req.body;
+
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      return res.status(400).json({ message: 'Razorpay payment details are required' });
+    }
+
+    const expectedSignature = crypto
+      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET || '')
+      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+      .digest('hex');
+
+    if (expectedSignature !== razorpay_signature) {
+      return res.status(400).json({ message: 'Payment signature verification failed' });
+    }
+
+    const purchase = await CoinPurchase.findOne({
+      ...(purchaseId ? { _id: purchaseId } : {}),
+      user: req.user._id,
+      razorpayOrderId: razorpay_order_id
+    });
+
+    if (!purchase) {
+      return res.status(404).json({ message: 'Purchase order not found' });
+    }
+
+    await approveRazorpayPurchase(purchase, {
+      razorpay_payment_id,
+      razorpay_signature
+    });
+
+    const updatedUser = await User.findById(req.user._id).select('-password');
+
+    res.json({
+      message: 'Payment verified and coins credited',
+      purchase,
+      user: updatedUser
+    });
+  } catch (error) {
+    console.error('Verify Razorpay payment error:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const razorpayWebhook = async (req, res) => {
+  try {
+    if (!RAZORPAY_WEBHOOK_SECRET) {
+      return res.status(503).json({ message: 'Webhook secret is not configured' });
+    }
+
+    const signature = req.headers['x-razorpay-signature'];
+    const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from(JSON.stringify(req.body || {}));
+    const expected = crypto
+      .createHmac('sha256', RAZORPAY_WEBHOOK_SECRET)
+      .update(rawBody)
+      .digest('hex');
+
+    if (signature !== expected) {
+      return res.status(400).json({ message: 'Invalid webhook signature' });
+    }
+
+    const event = JSON.parse(rawBody.toString('utf8'));
+    if (event.event === 'payment.captured' || event.event === 'order.paid') {
+      const payment = event.payload?.payment?.entity;
+      const order = event.payload?.order?.entity;
+      const orderId = payment?.order_id || order?.id;
+      const paymentId = payment?.id;
+
+      if (orderId) {
+        const purchase = await CoinPurchase.findOne({ razorpayOrderId: orderId });
+        if (purchase) {
+          await approveRazorpayPurchase(purchase, { id: paymentId });
+        }
+      }
+    }
+
+    res.json({ received: true });
+  } catch (error) {
+    console.error('Razorpay webhook error:', error);
+    res.status(500).json({ message: 'Webhook processing failed' });
+  }
+};
+
 
 module.exports = {
   register,
@@ -396,6 +616,7 @@ module.exports = {
   forgotPassword,
   resetPassword,
   changePassword,
-  createPaymentOrder,
-  verifyPayment
+  createPaymentOrder: createRazorpayPaymentOrder,
+  verifyPayment: verifyRazorpayPayment,
+  razorpayWebhook
 };

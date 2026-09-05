@@ -296,6 +296,12 @@ app.use(cors({
 // Handle preflight manually
 app.options("*", cors());
 
+app.post(
+  "/api/auth/razorpay-webhook",
+  express.raw({ type: "application/json" }),
+  require("./controllers/authController").razorpayWebhook
+);
+
 /* -------------------------------
    Middleware
 -------------------------------- */

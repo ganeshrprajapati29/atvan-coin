@@ -26,13 +26,23 @@ const coinPurchaseSchema = new mongoose.Schema({
   },
   paymentMethod: {
     type: String,
-    default: 'manual_upi'
+    enum: ['razorpay', 'manual_upi'],
+    default: 'razorpay'
   },
   upiId: {
     type: String,
     default: 'ciborigroup01@fbl'
   },
   utrNumber: String,
+  razorpayOrderId: {
+    type: String,
+    index: true
+  },
+  razorpayPaymentId: {
+    type: String,
+    index: true
+  },
+  razorpaySignature: String,
   screenshotUrl: String,
   adminNote: String,
   approvedBy: {
@@ -54,5 +64,6 @@ const coinPurchaseSchema = new mongoose.Schema({
 
 coinPurchaseSchema.index({ user: 1, status: 1 });
 coinPurchaseSchema.index({ status: 1, createdAt: -1 });
+coinPurchaseSchema.index({ razorpayOrderId: 1 }, { sparse: true });
 
 module.exports = mongoose.model('CoinPurchase', coinPurchaseSchema);
